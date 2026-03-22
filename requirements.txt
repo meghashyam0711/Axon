@@ -1,0 +1,6 @@
+Flask
+flask-cors
+requests
+PyYAML
+google-generativeai
+python-docx

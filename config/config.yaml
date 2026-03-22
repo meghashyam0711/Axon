@@ -1,0 +1,13 @@
+api_keys:
+  gemini_api_key: "AIzaSyBYUAaQ-eerQjFnYHSbSKcAvvP8xU5rEDM"
+  search_api_key: AIzaSyCqYr-pwmrA5Y7GCe7Xnyp2dhHaTJYfEQ0
+  search_engine_id: b1ce78cab2197441d
+  weather_api_key: a0e267a46d8c79ff481c9474df70b3a4
+database:
+  db_path: data/assistant.db
+logging:
+  file: logs/app.log
+  level: INFO
+voice:
+  tts_rate: 200
+  tts_voice: 0
