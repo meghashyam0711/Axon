@@ -4,3 +4,8 @@ requests
 PyYAML
 google-generativeai
 python-docx
+PyPDF2
+fastapi
+uvicorn[standard]
+python-multipart
+gTTS

@@ -1,9 +1,7 @@
 import google.generativeai as genai
 import warnings
-
 warnings.filterwarnings("ignore")
 genai.configure(api_key='AIzaSyBYUAaQ-eerQjFnYHSbSKcAvvP8xU5rEDM')
-
 print("Fetching models...")
 try:
     with open("models.txt", "w") as f:
