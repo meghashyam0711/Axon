@@ -125,7 +125,7 @@ def get_gemini_response(prompt):
         system_prompt = (
             "You are a highly intelligent and helpful AI assistant. Your goal is to provide "
             "comprehensive, accurate, and well-structured answers. Use markdown formatting such as "
-            "headings (using '
+            "headings (using '#', '##', etc.), bullet points, numbered lists, and bold text to make "
             "information clear and easy to read. Always aim to be thorough."
         )
         full_prompt = f"{system_prompt}\n\n--- USER'S QUESTION ---\n{prompt}"

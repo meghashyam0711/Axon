@@ -25,6 +25,51 @@ if ALL_GEMINI_KEYS and GEMINI_API_KEY in ALL_GEMINI_KEYS:
 OPENWEATHER_API_KEY = api_keys.get("weather_api_key", "")
 SEARCH_API_KEY = api_keys.get("search_api_key", "")
 SEARCH_ENGINE_ID = api_keys.get("search_engine_id", "")
+local_config = CONFIG.get("local_model", {})
+LOCAL_MODEL_ENABLED = local_config.get("enabled", True)
+LOCAL_MODEL_URL = local_config.get("url", "http://localhost:11434/v1")
+LOCAL_MODEL_NAME = local_config.get("model_name", "qwen2.5")
+
+def get_local_models():
+    if not LOCAL_MODEL_ENABLED:
+        return []
+    try:
+        url = f"{LOCAL_MODEL_URL.rstrip('/')}/models"
+        resp = http_requests.get(url, timeout=5)
+        if resp.status_code == 200:
+            data = resp.json()
+            models_list = data.get("data", [])
+            return [m["id"] for m in models_list]
+    except Exception as e:
+        logger.warning(f"Failed to fetch local models from {LOCAL_MODEL_URL}: {e}")
+    return []
+
+_cached_resolved_model = None
+
+def resolve_local_model_name() -> str:
+    global _cached_resolved_model
+    if _cached_resolved_model:
+        return _cached_resolved_model
+    available = get_local_models()
+    if not available:
+        return LOCAL_MODEL_NAME
+    if LOCAL_MODEL_NAME in available:
+        _cached_resolved_model = LOCAL_MODEL_NAME
+        return LOCAL_MODEL_NAME
+    for model in available:
+        if model.startswith(LOCAL_MODEL_NAME) or LOCAL_MODEL_NAME in model:
+            logger.info(f"Resolved local model match: {LOCAL_MODEL_NAME} -> {model}")
+            _cached_resolved_model = model
+            return model
+    for model in available:
+        if "qwen" in model.lower():
+            logger.info(f"Resolved local model Qwen fallback: {model}")
+            _cached_resolved_model = model
+            return model
+    logger.info(f"Resolved local model generic fallback: {available[0]}")
+    _cached_resolved_model = available[0]
+    return _cached_resolved_model
+
 log_config = CONFIG.get("logging", {})
 LOG_FILE = log_config.get("file", "logs/app.log")
 LOG_LEVEL = log_config.get("level", "INFO").upper()
@@ -39,31 +84,10 @@ logger = logging.getLogger("Axon_API")
 chat_sessions = {}
 gemini_models = {}
 GENAI_AVAILABLE = False
-DEFAULT_MODEL = "gemini-2.5-flash"
+DEFAULT_MODEL = "qwen-2.5-local"
 SUPPORTED_MODELS = [
-    {"id": "gemini-2.5-flash",       "name": "Gemini 2.5 Flash",       "description": "Fast & efficient"},
-    {"id": "gemini-2.5-pro",         "name": "Gemini 2.5 Pro",         "description": "Most capable thinking model"},
-    {"id": "gemini-2.5-flash-lite",  "name": "Gemini 2.5 Flash Lite",  "description": "Lightweight 2.5 model"},
-    {"id": "gemini-2.0-flash",       "name": "Gemini 2 Flash",         "description": "Balanced performance"},
-    {"id": "gemini-2.0-flash-lite",  "name": "Gemini 2 Flash Lite",    "description": "Lightweight & quick"},
-    {"id": "gemini-3-flash-preview",  "name": "Gemini 3 Flash",       "description": "Next-gen fast model"},
-    {"id": "gemini-3-pro-preview",    "name": "Gemini 3 Pro",         "description": "Next-gen pro model"},
-    {"id": "gemini-3.1-flash-lite-preview", "name": "Gemini 3.1 Flash Lite", "description": "Ultra-light 3.1 model"},
-    {"id": "gemini-3.1-pro-preview",        "name": "Gemini 3.1 Pro",        "description": "Advanced 3.1 pro model"},
-    {"id": "gemini-2.5-flash-preview-tts",        "name": "Gemini 3.1 Flash TTS",        "description": "Text-to-speech optimised"},
-    {"id": "gemini-robotics-er-1.5-preview",      "name": "Gemini Robotics ER 1.6 Preview", "description": "Robotics & embodiment"},
-    {"id": "gemini-2.5-computer-use-preview-10-2025", "name": "Computer Use Preview",     "description": "Autonomous computer control"},
-    {"id": "deep-research-pro-preview-12-2025",   "name": "Deep Research Pro Preview",    "description": "Deep multi-step research"},
-    {"id": "gemini-2.0-flash-001",   "name": "Gemini 2 (Search)",          "description": "Search grounding — Gemini 2"},
-    {"id": "gemini-2.5-flash-image", "name": "Gemini 2.5 Flash Image",     "description": "Image generation model"},
-    {"id": "gemini-3-pro-image-preview", "name": "Gemini 3 (Search)",      "description": "Search grounding — Gemini 3"},
-    {"id": "gemini-3.1-flash-image-preview", "name": "Gemini 3.1 Flash Image", "description": "Next-gen image generation"},
-    {"id": "gemma-3-1b-it",    "name": "Gemma 3 1B",  "description": "Compact on-device model"},
-    {"id": "gemma-3-4b-it",    "name": "Gemma 3 4B",  "description": "Small but capable"},
-    {"id": "gemma-3-12b-it",   "name": "Gemma 3 12B", "description": "Mid-size open model"},
-    {"id": "gemma-3-27b-it",   "name": "Gemma 3 27B", "description": "Largest Gemma model"},
-    {"id": "gemma-3n-e4b-it",  "name": "Gemma 3n E4B", "description": "Efficient nano 4B"},
-    {"id": "gemma-3n-e2b-it",  "name": "Gemma 3n E2B", "description": "Efficient nano 2B"},
+    {"id": "qwen-2.5-local",         "name": "Qwen 2.5 (Local)",       "description": "Running locally on your machine"},
+    {"id": "gemini-2.5-flash",       "name": "Gemini 2.5 Flash",       "description": "Fast & efficient cloud model"},
 ]
 try:
     import google.generativeai as genai
@@ -71,6 +95,8 @@ try:
     if GEMINI_API_KEY and "YOUR_GEMINI" not in GEMINI_API_KEY:
         genai.configure(api_key=GEMINI_API_KEY)
         for model_info in SUPPORTED_MODELS:
+            if model_info["id"] == "qwen-2.5-local":
+                continue
             try:
                 gemini_models[model_info["id"]] = genai.GenerativeModel(model_info["id"])
                 logger.info(f"[OK] Initialized model: {model_info['id']}")
@@ -204,9 +230,60 @@ def detect_intent(message: str) -> tuple:
     if re.match(r'^[\d\.\s\+\-\*\/\%\(\)\^]+$', low):
         return ("math", low)
     return ("general", message)
+def get_session_history_for_openai(session_id: str, current_prompt: str) -> list:
+    db_messages = get_session_messages(session_id)
+    if db_messages:
+        messages = [{"role": msg["role"], "content": msg["content"]} for msg in db_messages]
+    else:
+        session_data = sessions_store.get(session_id, {})
+        messages = [{"role": msg["role"], "content": msg["content"]} for msg in session_data.get("messages", [])]
+    
+    # Avoid duplicate additions of the current prompt
+    if not messages or messages[-1]["role"] != "user" or messages[-1]["content"] != current_prompt:
+        messages.append({"role": "user", "content": current_prompt})
+        
+    # Limit history to the last 12 messages to reduce prefill/processing latency on local machine
+    truncated_messages = messages[-12:]
+        
+    current_time = datetime.now().strftime("%A, %B %d, %Y %I:%M %p")
+    dynamic_system_prompt = f"{SYSTEM_PROMPT}\n\nCurrent System Time: {current_time}"
+    
+    formatted_messages = []
+    formatted_messages.append({"role": "system", "content": dynamic_system_prompt})
+    
+    # Map any role discrepancies
+    for m in truncated_messages:
+        if m["role"] == "system":
+            continue
+        formatted_messages.append(m)
+        
+    return formatted_messages
+
 def get_ai_response(session_id: str, prompt: str, model_id: str = None) -> tuple:
     global current_key_index
     used_model_id = model_id or DEFAULT_MODEL
+    
+    if used_model_id == "qwen-2.5-local":
+        url = f"{LOCAL_MODEL_URL.rstrip('/')}/chat/completions"
+        headers = {"Content-Type": "application/json"}
+        openai_messages = get_session_history_for_openai(session_id, prompt)
+        resolved_name = resolve_local_model_name()
+        payload = {
+            "model": resolved_name,
+            "messages": openai_messages,
+            "stream": False
+        }
+        try:
+            resp = http_requests.post(url, json=payload, headers=headers, timeout=30)
+            if resp.status_code == 200:
+                data = resp.json()
+                reply = data["choices"][0]["message"]["content"]
+                return (reply, "qwen-2.5-local")
+            else:
+                return (f"❌ Local AI Error: Server returned status {resp.status_code} - {resp.text}", "qwen-2.5-local")
+        except Exception as e:
+            return (f"❌ Local AI Connection Error: Could not connect to local runner at {LOCAL_MODEL_URL}. Make sure Ollama or LM Studio is running. Error: {str(e)}", "qwen-2.5-local")
+
     model = gemini_models.get(used_model_id) or gemini_models.get(DEFAULT_MODEL)
     if not model:
         return ("⚠️ AI is not available.", None)
@@ -235,9 +312,45 @@ def get_ai_response(session_id: str, prompt: str, model_id: str = None) -> tuple
             logger.error(f"Gemini error (model={used_model_id}): {e}")
             return (f"❌ AI Error: {str(e)}", used_model_id)
     return ("❌ AI Error: All API keys exhausted.", used_model_id)
+
 def get_ai_response_stream(session_id: str, prompt: str, model_id: str = None):
     global current_key_index
     used_model_id = model_id or DEFAULT_MODEL
+    
+    if used_model_id == "qwen-2.5-local":
+        url = f"{LOCAL_MODEL_URL.rstrip('/')}/chat/completions"
+        headers = {"Content-Type": "application/json"}
+        openai_messages = get_session_history_for_openai(session_id, prompt)
+        resolved_name = resolve_local_model_name()
+        payload = {
+            "model": resolved_name,
+            "messages": openai_messages,
+            "stream": True
+        }
+        try:
+            resp = http_requests.post(url, json=payload, headers=headers, stream=True, timeout=15)
+            if resp.status_code != 200:
+                yield f"❌ Local AI Error: {resp.status_code} - {resp.text}"
+                return
+            for line in resp.iter_lines():
+                if line:
+                    line_str = line.decode('utf-8').strip()
+                    if line_str.startswith("data: "):
+                        data_content = line_str[6:]
+                        if data_content == "[DONE]":
+                            break
+                        try:
+                            chunk_json = json.loads(data_content)
+                            content = chunk_json["choices"][0]["delta"].get("content", "")
+                            if content:
+                                yield content
+                        except Exception:
+                            pass
+            return
+        except Exception as e:
+            yield f"❌ Local AI Connection Error: Could not connect to local runner at {LOCAL_MODEL_URL}. Make sure Ollama or LM Studio is running. Error: {str(e)}"
+            return
+
     model = gemini_models.get(used_model_id) or gemini_models.get(DEFAULT_MODEL)
     if not model:
         yield "⚠️ AI is not available."
@@ -475,7 +588,12 @@ async def root():
     return {"status": "ok", "name": "AivoraX API", "version": "3.0.0"}
 @app.get("/models")
 async def list_models():
-    models = [{**m, "available": m["id"] in gemini_models} for m in SUPPORTED_MODELS]
+    models = []
+    for m in SUPPORTED_MODELS:
+        if m["id"] == "qwen-2.5-local":
+            models.append({**m, "available": LOCAL_MODEL_ENABLED})
+        else:
+            models.append({**m, "available": m["id"] in gemini_models})
     return {"models": models, "default": DEFAULT_MODEL}
 @app.post("/chat")
 async def chat(req: ChatRequest, authorization: Optional[str] = Header(None)):

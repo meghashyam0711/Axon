@@ -12,13 +12,8 @@ const badgeColors = {
   red: 'bg-red-500/15 text-red-400 border-red-500/30',
 };
 const CATEGORY_ORDER = [
-  'Gemini 2.x',
-  'Gemini 3.x',
-  'Gemini 3.1',
-  'Specialised',
-  'Search',
-  'Image',
-  'Gemma',
+  'Local Models',
+  'Cloud Models',
 ];
 export default function ModelSelector() {
   const { selectedModel, selectModel, availableModels } = useModel();
@@ -74,7 +69,7 @@ export default function ModelSelector() {
           <div className="px-4 py-3 border-b border-[var(--color-border-primary)]">
             <p className="text-xs font-semibold text-[var(--color-text-primary)]">Select Model</p>
             <p className="text-[10px] text-[var(--color-text-tertiary)] mt-0.5">
-              {availableModels.length} models available · Same API key
+              {availableModels.length} models available
             </p>
           </div>
           {}
